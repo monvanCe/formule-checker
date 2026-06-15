@@ -24,16 +24,21 @@ function sortResults(results: BacktestResult[]): BacktestResult[] {
 }
 
 function formatDetailTable(results: BacktestResult[]): string[] {
-  const thin = '─'.repeat(78);
+  const thin = '─'.repeat(106);
   const lines: string[] = [];
 
   lines.push(
-    '  ' + ['SEMBOL'.padEnd(14), 'SKOR'.padEnd(8), 'SONUÇ'.padEnd(10),
-             'GİRİŞ'.padEnd(14), 'STOP'.padEnd(14), 'TP1'.padEnd(14), 'EN YÜKSEK'].join('')
+    '  ' + [
+      'SEMBOL'.padEnd(14), 'SKOR'.padEnd(8), 'SONUÇ'.padEnd(10),
+      'GİRİŞ'.padEnd(14), 'STOP'.padEnd(14),
+      'TP1'.padEnd(14), 'TP2'.padEnd(14), 'TP3'.padEnd(14),
+      'EN YÜKSEK',
+    ].join('')
   );
   lines.push('  ' + thin);
 
   for (const r of results) {
+    const { tp1, tp2, tp3 } = r.signal.takeProfits;
     lines.push(
       '  ' + [
         r.symbol.padEnd(14),
@@ -41,7 +46,9 @@ function formatDetailTable(results: BacktestResult[]): string[] {
         (r.tp1Reached ? 'TUTTU' : 'TUTMADI').padEnd(10),
         r.signal.entryPrice.toFixed(4).padEnd(14),
         r.signal.stopLoss.toFixed(4).padEnd(14),
-        r.signal.takeProfits.tp1.toFixed(4).padEnd(14),
+        tp1.toFixed(4).padEnd(14),
+        tp2.toFixed(4).padEnd(14),
+        tp3.toFixed(4).padEnd(14),
         r.highestPrice.toFixed(4),
       ].join('')
     );
@@ -52,8 +59,8 @@ function formatDetailTable(results: BacktestResult[]): string[] {
 
 function formatReport(summary: ReportSummary): string {
   const lines: string[] = [];
-  const sep = '═'.repeat(78);
-  const thin = '─'.repeat(78);
+  const sep = '═'.repeat(106);
+  const thin = '─'.repeat(106);
 
   lines.push(sep);
   lines.push('  TRADE ANALYZER — BACKTEST RAPORU');

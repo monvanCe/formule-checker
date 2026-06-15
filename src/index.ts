@@ -12,8 +12,8 @@ import { runBacktest } from './features/backtester';
 import { writeReport } from './features/reporter';
 import { AnalysisResult, SymbolKlineData } from './types';
 
-const TRAIN_SIZE = 970;
-const TEST_SIZE  = 30;
+const TRAIN_SIZE = 1000;
+const TEST_SIZE  = 0;
 const IS_CLEAN   = process.argv.includes('--clean');
 
 async function main(): Promise<void> {

@@ -9,6 +9,9 @@ import {
   checkOBVDivergence,
   calculateRSI,
   calculateMACD,
+  shouldRejectForMeanExtension,
+  shouldRejectFallingKnife,
+  detectVTypeReversal,
 } from './utils';
 
 // =====================================================================
@@ -64,7 +67,22 @@ export function calculateTradeScore(candles: Candle[]): TradeSignal {
     (rsiScore    * WEIGHTS.rsi)    +
     (macdScore   * WEIGHTS.macd);
 
-  const finalScore = Math.min(baseScore * volatilityMultiplier, 100);
+  let finalScore = Math.min(baseScore * volatilityMultiplier, 100);
+
+  // Ortalamadan aşırı uzaklaşma filtresi: pump tepesinde skoru sıfırla
+  if (shouldRejectForMeanExtension(candles, currentPrice)) {
+    finalScore = 0;
+  }
+
+  // Düşen bıçak vs. V-Tipi dönüş: çekiç mumu diğer kuralları ezer
+  const isCapitulation = detectVTypeReversal(candles, atr, 20);
+  const isFallingKnife = shouldRejectFallingKnife(candles, atr, 12);
+
+  if (isCapitulation) {
+    finalScore = 100;
+  } else if (isFallingKnife) {
+    finalScore = 0;
+  }
 
   // =====================================================================
   // 4. DİNAMİK HEDEF VE STOP BELİRLEME (ATR Tabanlı)

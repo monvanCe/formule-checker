@@ -35,6 +35,78 @@ function calculateSMA(values: number[], period: number): number[] {
   return result;
 }
 
+export function getLatestSMA(candles: Candle[], period: number): number | null {
+  if (candles.length < period) return null;
+
+  const closes    = candles.map((c) => c.close);
+  const smaValues = calculateSMA(closes, period);
+  return smaValues[smaValues.length - 1] ?? null;
+}
+
+// Parabolik pump tepelerinde fiyat ortalamadan çok uzaklaşır; geç kalan indikatörler
+// yanıltıcı yüksek skor üretir. Bu filtre o durumda sinyali iptal eder.
+export function shouldRejectForMeanExtension(
+  candles: Candle[],
+  price: number,
+  smaPeriods: number[] = [20, 50],
+  thresholdPct = 0.15
+): boolean {
+  return smaPeriods.some((period) => {
+    const sma = getLatestSMA(candles, period);
+    if (sma === null || sma === 0) return false;
+
+    const distancePct = (price - sma) / sma;
+    return distancePct > thresholdPct;
+  });
+}
+
+// ─── WICK REJECTION & DUMP FILTER ─────────────────────────────────────────────
+// Üst fitiller (balina iğneleri) tahtayı uzun süre zehirler → tam lookback boyunca reddet.
+// Düşen bıçak ise sadece aktif çakılma anında tehlikelidir → yalnızca son 1-2 muma bak.
+export function shouldRejectFallingKnife(candles: Candle[], atr: number, lookback = 12): boolean {
+  if (candles.length < lookback) return false;
+
+  const recentCandles = candles.slice(-lookback);
+
+  const hasPoisonousWick = recentCandles.some((candle) => {
+    const body      = Math.abs(candle.open - candle.close) || 0.00000001;
+    const upperWick = candle.high - Math.max(candle.open, candle.close);
+    return (upperWick > body * 3) && (upperWick > atr * 2.0);
+  });
+
+  if (hasPoisonousWick) return true;
+
+  const lastTwoCandles = candles.slice(-2);
+  const isCurrentlyCrashing = lastTwoCandles.some((candle) => {
+    const body  = Math.abs(candle.open - candle.close);
+    const isRed = candle.close < candle.open;
+    return isRed && (body > atr * 2.5);
+  });
+
+  return isCurrentlyCrashing;
+}
+
+// ─── V-TYPE REVERSAL (CAPITULATION) DETECTOR ──────────────────────────────────
+// Ayıların pes ettiği ve balinaların dipten devasa hacimle mal topladığı
+// "Çekiç" mumlarını (V-Dönüşleri) yakalar.
+export function detectVTypeReversal(candles: Candle[], atr: number, lookback = 20): boolean {
+  if (candles.length < lookback + 1) return false;
+
+  const currentCandle = candles[candles.length - 1];
+
+  const body = Math.abs(currentCandle.open - currentCandle.close) || 0.00000001;
+  const lowerWick = Math.min(currentCandle.open, currentCandle.close) - currentCandle.low;
+
+  const isHammer  = lowerWick > (body * 2);
+  const isDeepDip = lowerWick > (atr * 1.5);
+
+  const pastCandles = candles.slice(-(lookback + 1), -1);
+  const avgVolume   = pastCandles.reduce((sum, c) => sum + c.volume, 0) / lookback;
+  const hasVolumeSpike = currentCandle.volume > (avgVolume * 2);
+
+  return isHammer && isDeepDip && hasVolumeSpike;
+}
+
 // ─── BOLLINGER BANDWIDTH ──────────────────────────────────────────────────────
 // Bantların genişliği: sıkışma (düşük) → kırılım (yüksek) sinyali verir.
 export function calculateBollingerBandwidth(candles: Candle[], period: number): number {

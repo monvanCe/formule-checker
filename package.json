@@ -1,0 +1,19 @@
+{
+  "name": "trade-analyzer",
+  "version": "1.0.0",
+  "description": "Binance kline backtest system",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node dist/index.js",
+    "start:clean": "npm run build && node dist/index.js --clean"
+  },
+  "dependencies": {
+    "sql.js": "^1.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "@types/sql.js": "^1.4.9",
+    "typescript": "^5.3.3"
+  }
+}

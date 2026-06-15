@@ -1,7 +1,19 @@
-import { AnalysisResult, BacktestResult, ReportSummary } from '../../types';
+import { AnalysisResult, BacktestResult, ReportSummary, ScoreGroupStats } from '../../types';
 import { log } from '../../utils';
 
-// Test mumlarında fiyat TP1'e ulaştı mı?
+const GROUP_SIZE = 10;
+
+function buildScoreGroups(): { label: string; min: number; max: number }[] {
+  const groups: { label: string; min: number; max: number }[] = [];
+  for (let min = 0; min < 100; min += GROUP_SIZE) {
+    const max = min + GROUP_SIZE;
+    groups.push({ label: `${min}-${max}`, min, max });
+  }
+  return groups;
+}
+
+const SCORE_GROUPS = buildScoreGroups();
+
 function didReachTP1(testCandles: AnalysisResult['testCandles'], tp1: number): {
   reached: boolean;
   reachedAt?: number;
@@ -15,7 +27,6 @@ function didReachTP1(testCandles: AnalysisResult['testCandles'], tp1: number): {
     if (candle.high > highestPrice) highestPrice = candle.high;
     if (candle.low  < lowestPrice)  lowestPrice  = candle.low;
 
-    // Mumun high'ı TP1'e değdi mi?
     if (candle.high >= tp1) {
       return {
         reached:      true,
@@ -27,6 +38,28 @@ function didReachTP1(testCandles: AnalysisResult['testCandles'], tp1: number): {
   }
 
   return { reached: false, highestPrice, lowestPrice };
+}
+
+function hitRate(hit: number, total: number): number {
+  return total > 0 ? parseFloat(((hit / total) * 100).toFixed(2)) : 0;
+}
+
+function buildGroupStats(results: BacktestResult[]): ScoreGroupStats[] {
+  return SCORE_GROUPS.map(({ label, min, max }) => {
+    const group = results.filter((r) => {
+      const score = r.signal.score;
+      return score >= min && (max === 100 ? score <= max : score < max);
+    });
+    const tp1Hit = group.filter((r) => r.tp1Reached).length;
+    return {
+      label,
+      min,
+      max,
+      total:      group.length,
+      tp1Hit,
+      tp1HitRate: hitRate(tp1Hit, group.length),
+    };
+  });
 }
 
 export function runBacktest(analysisResults: AnalysisResult[]): ReportSummary {
@@ -49,9 +82,8 @@ export function runBacktest(analysisResults: AnalysisResult[]): ReportSummary {
   }
 
   const tp1Hit     = results.filter((r) => r.tp1Reached).length;
-  const tp1HitRate = results.length > 0
-    ? parseFloat(((tp1Hit / results.length) * 100).toFixed(2))
-    : 0;
+  const tp1HitRate = hitRate(tp1Hit, results.length);
+  const scoreGroups = buildGroupStats(results);
 
   log.ok(`Backtest tamamlandı. TP1 isabet: ${tp1Hit}/${results.length} (%${tp1HitRate})`);
 
@@ -60,5 +92,6 @@ export function runBacktest(analysisResults: AnalysisResult[]): ReportSummary {
     tp1Hit,
     tp1HitRate,
     results,
+    scoreGroups,
   };
 }

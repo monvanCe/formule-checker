@@ -26,22 +26,32 @@ export interface SymbolKlineData {
 export interface AnalysisResult {
   symbol: string;
   signal: TradeSignal;
-  trainCandles: Candle[];   // ilk 750
-  testCandles: Candle[];    // son 250
+  trainCandles: Candle[];
+  testCandles: Candle[];
 }
 
 export interface BacktestResult {
   symbol: string;
   signal: TradeSignal;
   tp1Reached: boolean;
-  tp1ReachedAt?: number; // candle openTime
+  tp1ReachedAt?: number;
   highestPrice: number;
   lowestPrice: number;
+}
+
+export interface ScoreGroupStats {
+  label: string;
+  min: number;
+  max: number;
+  total: number;
+  tp1Hit: number;
+  tp1HitRate: number;
 }
 
 export interface ReportSummary {
   totalAnalyzed: number;
   tp1Hit: number;
-  tp1HitRate: number; // yüzde
+  tp1HitRate: number;
   results: BacktestResult[];
+  scoreGroups: ScoreGroupStats[];
 }

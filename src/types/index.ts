@@ -7,6 +7,11 @@ export interface Candle {
   volume: number;
 }
 
+export interface OrderBookWalls {
+  buyWallPrice: number;
+  sellWallPrice: number;
+}
+
 export interface TradeSignal {
   score: number;
   entryPrice: number;

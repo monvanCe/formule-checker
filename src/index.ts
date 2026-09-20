@@ -1,20 +1,21 @@
 import { log } from './utils';
 import { getCleanSymbolList } from './features/market-data';
 import { fetchAllKlines } from './features/kline-fetcher';
+import { fetchAllOrderBookWalls } from './features/depth-fetcher';
 import {
   clearDatabase,
   isDatabasePopulated,
   saveKlineData,
   loadKlineData,
 } from './features/database';
-import { calculateTradeScore } from './features/math-engine';
+import { calculateLiquidityScore } from './features/math-engine';
 import { runBacktest } from './features/backtester';
 import { writeReport } from './features/reporter';
-import { AnalysisResult, SymbolKlineData } from './types';
+import { AnalysisResult, OrderBookWalls, SymbolKlineData } from './types';
 
 const TRAIN_SIZE = 1000;
-const TEST_SIZE  = 0;
-const IS_CLEAN   = process.argv.includes('--clean');
+const TEST_SIZE = 0;
+const IS_CLEAN = process.argv.includes('--clean');
 
 async function main(): Promise<void> {
   console.log('\n' + '█'.repeat(60));
@@ -23,7 +24,7 @@ async function main(): Promise<void> {
   console.log('█'.repeat(60) + '\n');
 
   // ── 1. VERİTABANI HAZIRLIK ──────────────────────────────────────────
-  log.step('ADIM 1 / 4 — Veri Kaynağı Belirleniyor');
+  log.step('ADIM 1 / 5 — Veri Kaynağı Belirleniyor');
 
   if (IS_CLEAN) {
     await clearDatabase();
@@ -31,11 +32,11 @@ async function main(): Promise<void> {
 
   let allData: SymbolKlineData[];
 
-  if (!IS_CLEAN && await isDatabasePopulated()) {
-    log.info('Veritabanında mevcut veri bulundu. DB\'den yükleniyor...');
+  if (!IS_CLEAN && (await isDatabasePopulated())) {
+    log.info("Veritabanında mevcut veri bulundu. DB'den yükleniyor...");
     allData = await loadKlineData();
   } else {
-    log.info('Binance\'ten veri çekme işlemi başlıyor...');
+    log.info("Binance'ten kline verisi çekme işlemi başlıyor...");
 
     const symbols = await getCleanSymbolList();
     const fetched = await fetchAllKlines(symbols);
@@ -48,8 +49,16 @@ async function main(): Promise<void> {
 
   log.ok(`Toplam kullanılabilir sembol: ${allData.length}`);
 
-  // ── 2. ANALİZ (İlk 750 mum) ─────────────────────────────────────────
-  log.step('ADIM 2 / 4 — Matematik Motoru Çalışıyor (Train: ilk 750 mum)');
+  // ── 2. EMİR DEFTERİ (Depth) — ardışık, rate-limit dostu ──────────────
+  log.step('ADIM 2 / 5 — Emir Defteri Duvarları Çekiliyor');
+
+  const wallEntries = await fetchAllOrderBookWalls(allData.map((d) => d.symbol));
+  const wallsBySymbol = new Map<string, OrderBookWalls>(
+    wallEntries.map((w) => [w.symbol, w.walls])
+  );
+
+  // ── 3. ANALİZ (Likidite & Hacim) ─────────────────────────────────────
+  log.step('ADIM 3 / 5 — Likidite Motoru Çalışıyor');
 
   const analysisResults: AnalysisResult[] = [];
   let skipped = 0;
@@ -60,9 +69,15 @@ async function main(): Promise<void> {
       continue;
     }
 
+    const walls = wallsBySymbol.get(item.symbol);
+    if (!walls) {
+      skipped++;
+      continue;
+    }
+
     const trainCandles = item.candles.slice(0, TRAIN_SIZE);
-    const testCandles  = item.candles.slice(TRAIN_SIZE, TRAIN_SIZE + TEST_SIZE);
-    const signal       = calculateTradeScore(trainCandles);
+    const testCandles = item.candles.slice(TRAIN_SIZE, TRAIN_SIZE + TEST_SIZE);
+    const signal = calculateLiquidityScore(trainCandles, walls);
 
     analysisResults.push({
       symbol: item.symbol,
@@ -72,19 +87,20 @@ async function main(): Promise<void> {
     });
   }
 
-  log.ok(`Analiz tamamlandı. İşlenen: ${analysisResults.length} | Atlatılan (yetersiz mum): ${skipped}`);
+  log.ok(
+    `Analiz tamamlandı. İşlenen: ${analysisResults.length} | Atlatılan: ${skipped}`
+  );
 
-  // ── 3. BACKTEST (Kalan 250 mum) ──────────────────────────────────────
-  log.step('ADIM 3 / 4 — Backtest Çalışıyor (Test: 751-1000. mumlar)');
+  // ── 4. BACKTEST ──────────────────────────────────────────────────────
+  log.step('ADIM 4 / 5 — Backtest Çalışıyor');
 
   const summary = runBacktest(analysisResults);
 
-  // ── 4. RAPOR ─────────────────────────────────────────────────────────
-  log.step('ADIM 4 / 4 — Rapor Yazılıyor');
+  // ── 5. RAPOR ─────────────────────────────────────────────────────────
+  log.step('ADIM 5 / 5 — Rapor Yazılıyor');
 
   const reportContent = writeReport(summary);
 
-  // Terminal özet
   console.log('\n' + reportContent);
 }
 
